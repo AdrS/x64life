@@ -5,9 +5,29 @@ usage_str:
 	.ascii "usage: gameoflife <size> <generations>\n"
 usage_str_end:
 	.set usage_str_len, usage_str_end - usage_str
+rng_state:
+ 	.long 0
 
 .section .text
 .globl _start
+
+# Copied from: https://sourceware.org/git/?p=glibc.git;a=blob;f=stdlib/random_r.c;hb=glibc-2.26#l362
+srand:
+	mov %edi, rng_state
+	ret
+
+rand:
+	mov rng_state, %eax
+	imul $1103515245, %eax
+	add $12345, %eax
+	and $0x7fffffff, %eax
+	mov %eax, rng_state
+	ret
+
+# Each row is a c-string ending with "\n" with space for empty, '.' for occupied.
+newgrid:
+	# TODO:
+	ret
 
 usage:
 	# Write usage message to stderr
@@ -62,6 +82,7 @@ L_main_parse_args:
 	# Grid size
 	mov 0x10(%rsp), %rdi
 	call atoi
+	# TODO: Check that grid size > 0
 	mov %rax, %r12 # Calle save
 
 	# Num generations
@@ -69,7 +90,20 @@ L_main_parse_args:
 	call atoi
 	mov %rax, %r13 # Calle save
 
+	# Seed RNG
 	mov %r12, %rdi
-	add %r13, %rdi
+	call srand
+
+	# For testing RNG code
+	xor %r14, %r14
+L_rng_loop_start:
+	cmp %r13, %r14
+	jg L_rng_loop_end
+	call rand
+	inc %r14
+	jmp L_rng_loop_start
+L_rng_loop_end:
+
+	mov %rax, %rdi
 	mov $60, %rax
 	syscall

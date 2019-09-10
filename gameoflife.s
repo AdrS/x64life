@@ -2,14 +2,43 @@
 
 .section .data
 usage_str:
-	.ascii "usage: gameoflife <size> <generations>\n"
-usage_str_end:
-	.set usage_str_len, usage_str_end - usage_str
+	.ascii "usage: gameoflife <size> <generations>\n\0"
+mmap_error:
+	.ascii "error: could not allocate memory\n\0"
 rng_state:
  	.long 0
 
+# TODO: pointers for cur and old grids
+
 .section .text
 .globl _start
+
+# rdi - fd
+# rsi - string
+# Note: does not add newline
+fprint:
+	push %rsi
+	push %rdi
+	mov %rsi, %rdi
+	call strlen
+	mov %rax, %rdx
+	pop %rdi
+	pop %rsi
+	mov $1, %rax
+	syscall
+	ret
+
+# rdi - string
+fatal:
+	# Print message to stderr
+	mov %rdi, %rsi
+	mov $2, %rdi
+	call fprint
+
+	# exit(1)
+	mov $60, %rax
+	mov $1, %rdi
+	syscall
 
 # Copied from: https://sourceware.org/git/?p=glibc.git;a=blob;f=stdlib/random_r.c;hb=glibc-2.26#l362
 srand:
@@ -24,23 +53,39 @@ rand:
 	mov %eax, rng_state
 	ret
 
-# Each row is a c-string ending with "\n" with space for empty, '.' for occupied.
+# Use spaces for top, bottom, and left border. Use newline for right border
 newgrid:
-	# TODO:
+	# r11 = size of one grid
+	mov %rdi, %r11
+	# add space for border
+	add $2, %r11
+	imul %r11, %r11
+	
+	# mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0)
+	# see: https://code.woboq.org/userspace/glibc/sysdeps/unix/sysv/linux/bits/mman-linux.h.html
+	# for definitions of constants
+	mov $9, %rax      # syscall number
+	xor %edi, %edi    # addr
+	mov %r11, %rsi    # len - does not need to be multiple of page size
+	shl $1, %rsi      # (we need two grids, so double the length)
+	movl $3, %edx     # protection
+	movl $0x22, %r10d # flags
+	xor %r8d, %r8d    # fd
+	xor %r9d, %r9d    # offset
+	syscall
+
+	# Check that allocation succeed
+	cmp $0, %rax # TODO: does not work
+	jge L_newgrid_alloc_succeeded
+	mov $mmap_error, %rdi
+	call fatal
+
+L_newgrid_alloc_succeeded:
 	ret
 
 usage:
-	# Write usage message to stderr
-	mov $1, %rax
-	mov $1, %rdi
-	mov $usage_str, %rsi
-	mov $usage_str_len, %rdx
-	syscall
-
-	# exit(1)
-	mov $60, %rax
-	mov $1, %rdi
-	syscall
+	mov $usage_str, %rdi
+	call fatal
 
 strlen:
 	mov %rdi, %rax
@@ -94,16 +139,9 @@ L_main_parse_args:
 	mov %r12, %rdi
 	call srand
 
-	# For testing RNG code
-	xor %r14, %r14
-L_rng_loop_start:
-	cmp %r13, %r14
-	jg L_rng_loop_end
-	call rand
-	inc %r14
-	jmp L_rng_loop_start
-L_rng_loop_end:
-
+	mov %r12, %rdi
+	call newgrid
 	mov %rax, %rdi
+
 	mov $60, %rax
 	syscall

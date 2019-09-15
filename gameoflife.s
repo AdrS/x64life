@@ -187,6 +187,112 @@ L_init_end:
 	pop %rax # restore grid pointer
 	ret
 
+# Inputs:
+# rdi = pointer to grid
+# rsi = side length (with border)
+# rdx = row index (base 1)
+# rcx = col index (base 1)
+# Output: rax = ' ' if cell will be dead, 'A' if cell will be alive
+nextcellstate:
+	# Address of cell
+	imul %rsi, %rdx
+	add %rdx, %rdi
+	add %rcx, %rdi
+
+	# Get current value of cell
+	movzx (%rdi), %rax
+
+	# Count number of living neighbors
+	# r11 = number of living neighbors
+	xor %r11d, %r11d
+	# Inspect in the following order
+	# 1 2 3
+	# 8   4
+	# 7 6 5
+
+	# NW
+	sub %rsi, %rdi
+	dec %rdi
+	cmpb $0x20, (%rdi)
+	je L_nw_dead
+	inc %r11
+L_nw_dead:
+
+	# N
+	inc %rdi
+	cmpb $0x20, (%rdi)
+	je L_n_dead
+	inc %r11
+L_n_dead:
+
+	# NE
+	inc %rdi
+	cmpb $0x20, (%rdi)
+	je L_ne_dead
+	inc %r11
+L_ne_dead:
+
+	# E
+	add %rsi, %rdi
+	cmpb $0x20, (%rdi)
+	je L_e_dead
+	inc %r11
+L_e_dead:
+
+	# SE
+	add %rsi, %rdi
+	cmpb $0x20, (%rdi)
+	je L_se_dead
+	inc %r11
+L_se_dead:
+
+	# S
+	dec %rdi
+	cmpb $0x20, (%rdi)
+	je L_s_dead
+	inc %r11
+L_s_dead:
+
+	# SW
+	dec %rdi
+	cmpb $0x20, (%rdi)
+	je L_sw_dead
+	inc %r11
+L_sw_dead:
+
+	# W
+	sub %rsi, %rdi
+	cmpb $0x20, (%rdi)
+	je L_w_dead
+	inc %r11
+L_w_dead:
+
+	# # exit(num neighbors)
+	# mov $60, %rax
+	# mov %r11, %rdi
+	# syscall
+
+	# < 2 neighbors => dead
+	cmp $2, %r11
+	jl L_nextcellstate_dead
+
+	cmp $3, %r11
+	# > 3 neighbors => dead
+	jg L_nextcellstate_dead
+
+	# 2 neighbors => states states the same
+	cmp $3, %r11
+	jne L_nextcellstate_end
+
+	# 3 neighbors => alive
+	mov $0x41, %rax
+	ret
+	
+L_nextcellstate_dead:
+	mov $0x20, %rax
+L_nextcellstate_end:
+	ret
+
 usage:
 	mov $usage_str, %rdi
 	call fatal
@@ -250,6 +356,9 @@ L_main_parse_args:
 	call newgrid
 	push %rax       #save pointer to grid
 
+	# Update length to include border
+	add $2, %r12
+
 	# for each generation
 	xor %r14d, %r14d
 L_main_loop:
@@ -271,6 +380,20 @@ L_main_loop:
 	mov %rax, %rsi
 	call fprint
 	inc %r14
+
+	pop %rax
+	push %rax
+
+	# Test nextcellstate
+	mov %rax, %rdi
+	mov %r12, %rsi
+	mov $1, %rdx
+	mov $1, %rcx
+	call nextcellstate
+	mov %rax, %rdi
+	mov $60, %rax
+	syscall
+
 
 	# TODO: update grid
 

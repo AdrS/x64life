@@ -53,13 +53,58 @@ rand:
 	mov %eax, rng_state
 	ret
 
-# Use spaces for top, bottom, and left border. Use newline for right border
+# Input: rdi = pointer to grid, rsi = side length (not including border)
+cleargrid:
+	# r8 = num rows (including border)
+	mov %rsi, %r8
+	add $2, %r8
+	# r9 = num cols (excluding newline)
+	mov %rsi, %r9
+	inc %r9
+
+	# rcx = cur row index, rdx = cur col index
+	xor %ecx, %ecx
+	# for each row
+L_cleargrid_row_loop:
+	cmp %r8, %rcx
+	jge L_cleargrid_end
+
+	# for each column
+	xor %edx, %edx
+L_cleargrid_col_loop:
+	cmp %r9, %rdx
+	jge L_cleargrid_col_end
+	# Make cell empty
+	movb $0x20, (%rdi)
+	inc %rdi
+	inc %rdx
+	jmp L_cleargrid_col_loop
+L_cleargrid_col_end:
+	# Add newline
+	movb $0xa, (%rdi)
+	inc %rdi
+
+	inc %rcx
+	jmp L_cleargrid_row_loop
+L_cleargrid_end:
+
+	# Add null terminator
+	movb $0, (%rdi)
+	ret
+
+# Input: rdi = side length of grid
+# Ouput: rax = pointer to allocated grid
+# Use spaces for top, bottom, and left border. Use newline for right border. Null terminated
 newgrid:
-	# r11 = size of one grid
+	push %rdi        # save side length of grid
+
+	# r11 = total size of grid (and border)
 	mov %rdi, %r11
 	# add space for border
 	add $2, %r11
 	imul %r11, %r11
+	# space for null terminator
+	inc %r11
 	
 	# mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0)
 	# see: https://code.woboq.org/userspace/glibc/sysdeps/unix/sysv/linux/bits/mman-linux.h.html
@@ -75,12 +120,16 @@ newgrid:
 	syscall
 
 	# Check that allocation succeed
-	cmp $0, %rax # TODO: does not work
+	cmp $0, %rax
 	jge L_newgrid_alloc_succeeded
 	mov $mmap_error, %rdi
 	call fatal
 
 L_newgrid_alloc_succeeded:
+	mov %rax, %rdi
+	pop %rsi # restore side lenght of grid
+	call cleargrid
+	# TODO: randomly initialize grid
 	ret
 
 usage:
@@ -139,9 +188,17 @@ L_main_parse_args:
 	mov %r12, %rdi
 	call srand
 
+	# Make new grid
 	mov %r12, %rdi
 	call newgrid
-	mov %rax, %rdi
+	push %rax       #save pointer to grid
 
+	# Print grid
+	mov $0, %rdi
+	mov %rax, %rsi
+	call fprint
+
+	# exit(0)
 	mov $60, %rax
+	xor %edi, %edi
 	syscall

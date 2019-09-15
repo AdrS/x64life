@@ -5,6 +5,8 @@ usage_str:
 	.ascii "usage: gameoflife <size> <seed> <generations>\n\0"
 mmap_error:
 	.ascii "error: could not allocate memory\n\0"
+iteration_message:
+	.ascii "Generation\n\0"
 rng_state:
  	.long 0
 
@@ -248,10 +250,32 @@ L_main_parse_args:
 	call newgrid
 	push %rax       #save pointer to grid
 
+	# for each generation
+	xor %r14d, %r14d
+L_main_loop:
+	cmp %r13, %r14
+	jge L_main_loop_end
+
+	pop %rax
+	push %rax
+
 	# Print grid
+	mov $0, %rdi
+	mov $iteration_message, %rsi
+	call fprint
+
+	pop %rax
+	push %rax
+
 	mov $0, %rdi
 	mov %rax, %rsi
 	call fprint
+	inc %r14
+
+	# TODO: update grid
+
+	jmp L_main_loop
+L_main_loop_end:
 
 	# exit(0)
 	mov $60, %rax

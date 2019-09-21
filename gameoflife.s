@@ -303,6 +303,10 @@ L_nextcellstate_dead:
 L_nextcellstate_end:
 	ret
 
+# Input: rdi = pointer to current grid, rsi = pointer to next grid, rdx = side length
+nextgeneration:
+	ret
+
 usage:
 	mov $usage_str, %rdi
 	call fatal
@@ -387,17 +391,15 @@ L_main_loop:
 
 	inc %r14
 
-	# # Test nextcellstate
-	# mov %rax, %rdi
-	# mov %r12, %rsi
-	# mov $1, %rdx
-	# mov $1, %rcx
-	# call nextcellstate
-	# mov %rax, %rdi
-	# mov $60, %rax
-	# syscall
-
-	# TODO: update grid
+	mov 8(%rsp), %rdi
+	mov (%rsp), %rsi
+	mov %r12, %rdx
+	call nextgeneration
+	
+	# swap current and next grids
+	xchg %rdi, %rsi
+	mov %rdi, 8(%rsp)
+	mov %rsi, (%rsp)
 
 	jmp L_main_loop
 L_main_loop_end:

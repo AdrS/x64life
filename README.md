@@ -1,4 +1,4 @@
-# x64life
+# x86_64 Game of Life
 Conway's game of life written in x86_64 assembly without using glibc. 
 
 ```

@@ -95,7 +95,7 @@ L_cleargrid_end:
 	ret
 
 # Input: rdi = side length of grid
-# Ouput: rax = pointer to allocated grid
+# Ouput: rax = pointer to allocated grid, rdx = pointer to second grid
 # Use spaces for top, bottom, and left border. Use newline for right border. Null terminated
 newgrid:
 	push %rdi        # save side length of grid
@@ -107,7 +107,8 @@ newgrid:
 	imul %r11, %r11
 	# space for null terminator
 	inc %r11
-	
+	push %r11         # save size of single grid
+
 	# mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0)
 	# see: https://code.woboq.org/userspace/glibc/sysdeps/unix/sysv/linux/bits/mman-linux.h.html
 	# for definitions of constants
@@ -128,17 +129,24 @@ newgrid:
 	call fatal
 
 L_newgrid_alloc_succeeded:
-	mov %rax, %rdi
-	pop %rsi   # restore side length of grid
-	push %rax  # save grid pointer
-	push %rsi  # save side length
+	# save pointer to first grid [<grid1> <size> <length>]
+	push %rax
+
+	movq 8(%rsp), %rdi # load grid size
+	add %rax, %rdi      # compute address of second grid
+	push %rdi           # save pointer to second grid [<grid 2> <grid 1> <size> <length>]
+	movq 24(%rsp), %rsi
 	call cleargrid
 
-	pop %rsi # restore side length of grid
+	movq 8(%rsp), %rdi
+	movq 24(%rsp), %rsi
+	call cleargrid
+
+	movq 24(%rsp), %rsi # restore side length of grid
 	inc %rsi
 
 	# rdi = current cell in grid
-	mov %rax, %rdi
+	movq 8(%rsp), %rdi
 	# skip the border
 	add %rsi, %rdi
 	inc %rdi
@@ -184,7 +192,9 @@ L_init_col_end:
 	inc %rcx
 	jmp L_init_row_loop
 L_init_end:
-	pop %rax # restore grid pointer
+	pop %rdx # restore grid pointers
+	pop %rax
+	add $16, %rsp
 	ret
 
 # Inputs:
@@ -354,7 +364,8 @@ L_main_parse_args:
 	# Make new grid
 	mov %r12, %rdi
 	call newgrid
-	push %rax       #save pointer to grid
+	push %rax       #save pointer to cur grid
+	push %rdx		#save pointer to next grid [<grid2> <grid1>]
 
 	# Update length to include border
 	add $2, %r12
@@ -365,35 +376,26 @@ L_main_loop:
 	cmp %r13, %r14
 	jge L_main_loop_end
 
-	pop %rax
-	push %rax
-
 	# Print grid
 	mov $0, %rdi
 	mov $iteration_message, %rsi
 	call fprint
 
-	pop %rax
-	push %rax
-
 	mov $0, %rdi
-	mov %rax, %rsi
+	mov 8(%rsp), %rsi
 	call fprint
+
 	inc %r14
 
-	pop %rax
-	push %rax
-
-	# Test nextcellstate
-	mov %rax, %rdi
-	mov %r12, %rsi
-	mov $1, %rdx
-	mov $1, %rcx
-	call nextcellstate
-	mov %rax, %rdi
-	mov $60, %rax
-	syscall
-
+	# # Test nextcellstate
+	# mov %rax, %rdi
+	# mov %r12, %rsi
+	# mov $1, %rdx
+	# mov $1, %rcx
+	# call nextcellstate
+	# mov %rax, %rdi
+	# mov $60, %rax
+	# syscall
 
 	# TODO: update grid
 

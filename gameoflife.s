@@ -10,8 +10,6 @@ iteration_message:
 rng_state:
  	.long 0
 
-# TODO: pointers for cur and old grids
-
 .section .text
 .globl _start
 
@@ -170,7 +168,9 @@ L_init_col_loop:
 
 	# Randomly initialize cell
 	call rand
-	shr $29, %rax
+	shr $30, %rax
+
+	# TODO: make probability cell starts alive a parameter
 
 	# # Compute rax mod 5
 	# xor %edx, %edx
@@ -223,64 +223,59 @@ nextcellstate:
 	# NW
 	sub %rsi, %rdi
 	dec %rdi
-	cmpb $0x20, (%rdi)
-	je L_nw_dead
+	cmpb $0x41, (%rdi)
+	jne L_nw_dead
 	inc %r11
 L_nw_dead:
 
 	# N
 	inc %rdi
-	cmpb $0x20, (%rdi)
-	je L_n_dead
+	cmpb $0x41, (%rdi)
+	jne L_n_dead
 	inc %r11
 L_n_dead:
 
 	# NE
 	inc %rdi
-	cmpb $0x20, (%rdi)
-	je L_ne_dead
+	cmpb $0x41, (%rdi)
+	jne L_ne_dead
 	inc %r11
 L_ne_dead:
 
 	# E
 	add %rsi, %rdi
-	cmpb $0x20, (%rdi)
-	je L_e_dead
+	cmpb $0x41, (%rdi)
+	jne L_e_dead
 	inc %r11
 L_e_dead:
 
 	# SE
 	add %rsi, %rdi
-	cmpb $0x20, (%rdi)
-	je L_se_dead
+	cmpb $0x41, (%rdi)
+	jne L_se_dead
 	inc %r11
 L_se_dead:
 
 	# S
 	dec %rdi
-	cmpb $0x20, (%rdi)
-	je L_s_dead
+	cmpb $0x41, (%rdi)
+	jne L_s_dead
 	inc %r11
 L_s_dead:
 
 	# SW
 	dec %rdi
-	cmpb $0x20, (%rdi)
-	je L_sw_dead
+	cmpb $0x41, (%rdi)
+	jne L_sw_dead
 	inc %r11
 L_sw_dead:
 
 	# W
 	sub %rsi, %rdi
-	cmpb $0x20, (%rdi)
-	je L_w_dead
+	cmpb $0x41, (%rdi)
+	jne L_w_dead
 	inc %r11
 L_w_dead:
-
-	# # exit(num neighbors)
-	# mov $60, %rax
-	# mov %r11, %rdi
-	# syscall
 
 	# < 2 neighbors => dead
 	cmp $2, %r11
@@ -305,6 +300,60 @@ L_nextcellstate_end:
 
 # Input: rdi = pointer to current grid, rsi = pointer to next grid, rdx = side length
 nextgeneration:
+	# r15 = pointer to output position
+	mov %rsi, %r15
+
+	# rsi = side length
+	mov %rdx, %rsi
+
+	# r8 = num rows and cols (including first border row/col)
+	mov %rsi, %r8
+	inc %r8
+
+	# skip blank row
+	add %r8, %r15
+
+	# rdx = cur row index, rcx = cur col index
+	mov $1, %rdx # skip empty first row
+
+	# for each row
+L_nextgeneration_row_loop:
+	cmp %r8, %rdx
+	jge L_nextgeneration_end
+
+	# skip newline of previous row and blank first col
+	add $2, %r15
+
+	# for each column
+	mov $1, %rcx # skip empty first column
+L_nextgeneration_col_loop:
+	cmp %r8, %rcx
+	jge L_nextgeneration_col_end
+
+	# Save registers
+	# rdi (modified)
+	# rsi
+	# rdx (modified)
+	# rcx
+	# rax (modified)
+	# r11 (modified)
+	push %rdi
+	push %rdx
+
+	call nextcellstate
+	pop %rdx
+	pop %rdi
+
+	# save next cell state
+	movb %al, (%r15)
+	inc %r15
+
+	inc %rcx
+	jmp L_nextgeneration_col_loop
+L_nextgeneration_col_end:
+	inc %rdx
+	jmp L_nextgeneration_row_loop
+L_nextgeneration_end:
 	ret
 
 usage:
@@ -381,11 +430,11 @@ L_main_loop:
 	jge L_main_loop_end
 
 	# Print grid
-	mov $0, %rdi
+	mov $1, %rdi
 	mov $iteration_message, %rsi
 	call fprint
 
-	mov $0, %rdi
+	mov $1, %rdi
 	mov 8(%rsp), %rsi
 	call fprint
 
@@ -394,9 +443,12 @@ L_main_loop:
 	mov 8(%rsp), %rdi
 	mov (%rsp), %rsi
 	mov %r12, %rdx
+	sub $2, %rdx
 	call nextgeneration
 	
 	# swap current and next grids
+	mov 8(%rsp), %rdi
+	mov (%rsp), %rsi
 	xchg %rdi, %rsi
 	mov %rdi, 8(%rsp)
 	mov %rsi, (%rsp)

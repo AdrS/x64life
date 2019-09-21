@@ -310,6 +310,9 @@ nextgeneration:
 	mov %rsi, %r8
 	inc %r8
 
+	# rsi = side length (with border)
+	add $2, %rsi
+
 	# skip blank row
 	add %r8, %r15
 
